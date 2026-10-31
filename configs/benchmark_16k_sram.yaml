@@ -1,6 +1,7 @@
 # Academic Benchmark: <= 16 KB Static SRAM Optimization Configuration
 project:
-  name: "tinyml-kws-sram-optimization"
+  name: "sih-esp32-kws"
+  subproject: "tinyml-sram-optimization"
   benchmark: "Google Speech Commands v0.02"
   hard_sram_ceiling_bytes: 16384
 
