@@ -126,6 +126,7 @@ bool oled_available = false;
 
 bool setupOLED() {
     Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
+    Wire.setClock(400000); // 400 kHz Fast I2C for smooth live VU meter
     if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDRESS)) {
         if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
             Serial.println("[WARN] SSD1306 OLED not found at 0x3C or 0x3D. Running headless.");
@@ -157,20 +158,32 @@ void oledShowBoot() {
     oled.display();
 }
 
-void oledShowListening() {
+void oledShowListening(float rms = 0.0f, bool recording = false) {
     if (!oled_available) return;
     oled.clearDisplay();
     oled.drawRect(0, 0, 128, 64, SSD1306_WHITE);
-    oled.setCursor(8, 6);
+    oled.setCursor(8, 5);
     oled.setTextSize(1);
     oled.println("KWS: W76 (12-Class)");
-    oled.drawLine(6, 17, 122, 17, SSD1306_WHITE);
-    oled.setCursor(12, 26);
-    oled.setTextSize(2);
-    oled.println("LISTENING");
-    oled.setTextSize(1);
-    oled.setCursor(8, 48);
-    oled.println("Say a command...");
+    oled.drawLine(4, 15, 124, 15, SSD1306_WHITE);
+    
+    if (recording) {
+        oled.setCursor(14, 22);
+        oled.setTextSize(2);
+        oled.println("HEARING...");
+    } else {
+        oled.setCursor(12, 22);
+        oled.setTextSize(2);
+        oled.println("LISTENING");
+    }
+    
+    // Live Real-Time Audio Level VU Meter
+    oled.drawRect(8, 46, 112, 12, SSD1306_WHITE);
+    int bar_w = (int)((rms / 350.0f) * 108.0f);
+    if (bar_w > 108) bar_w = 108;
+    if (bar_w > 0) {
+        oled.fillRect(10, 48, bar_w, 8, SSD1306_WHITE);
+    }
     oled.display();
 }
 
@@ -534,6 +547,9 @@ void setup() {
 // ==============================================================================
 // 11. ARDUINO MAIN LOOP (CONTINUOUS AUDIO STREAMING & REAL-TIME VAD)
 // ==============================================================================
+static float latest_chunk_rms = 0.0f;
+static unsigned long last_oled_vu_time = 0;
+
 void loop() {
     // 1. Audio Ingestion via DMA with High-Pass DC Filter
     size_t bytes_read = 0;
@@ -561,6 +577,7 @@ void loop() {
 
         // 2. Real-Time Energy Tracking (RMS over DMA chunk)
         float chunk_rms = sqrtf(chunk_sum_sq / (float)samples_read);
+        latest_chunk_rms = chunk_rms;
 
         // Dynamic ambient noise floor tracking (slow EMA update)
         if (vad_state == VAD_LISTENING) {
@@ -569,8 +586,8 @@ void loop() {
             }
         }
 
-        // Adaptive speech trigger threshold (must be at least 320.0 and 2.5x room noise)
-        float speech_threshold = fmaxf(320.0f, ambient_noise_floor * 2.5f);
+        // Adaptive speech trigger threshold (sensitive: 2.0x noise floor, minimum floor of 55.0)
+        float speech_threshold = fmaxf(55.0f, ambient_noise_floor * 2.0f);
 
         // 3. VAD State Machine
         if (vad_state == VAD_LISTENING) {
@@ -605,10 +622,16 @@ void loop() {
         }
     }
 
-    // 4. OLED Auto-Revert Timer (returns to LISTENING after 2 seconds)
-    if (showing_detection_on_oled && (millis() - detection_display_start > OLED_DISPLAY_HOLD_MS)) {
-        showing_detection_on_oled = false;
-        oledShowListening();
+    // 4. OLED Live VU Meter & Auto-Revert Timer
+    if (showing_detection_on_oled) {
+        if (millis() - detection_display_start > OLED_DISPLAY_HOLD_MS) {
+            showing_detection_on_oled = false;
+        }
+    } else {
+        if (millis() - last_oled_vu_time > 80) { // 12 FPS smooth VU meter on OLED
+            last_oled_vu_time = millis();
+            oledShowListening(latest_chunk_rms, vad_state == VAD_RECORDING);
+        }
     }
 
     // 5. Interactive Serial Companion (Test Triggering & Manual Injections)
