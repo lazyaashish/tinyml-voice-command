@@ -62,3 +62,4 @@ if __name__ == "__main__":
 
     print("=== CandF_44ChDualResidual SRAM Memory Audit ===")
     calculate_sram_arena(input_shape=(49, 10, 1), layers=cand_f_layers)
+

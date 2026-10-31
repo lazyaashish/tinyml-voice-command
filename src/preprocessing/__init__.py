@@ -1,7 +1,16 @@
 """
-Audio preprocessing and feature extraction modules for SIH ESP32 KWS.
+Audio preprocessing and feature extraction modules for ESP32 KWS.
 """
 
-from .mfcc_features import AudioFeatureExtractor, KWSAudioDataset
+from .mel_features import AudioFeatureExtractor, KWSAudioDataset, create_mel_filterbank, create_dct_matrix
 
-__all__ = ["AudioFeatureExtractor", "KWSAudioDataset"]
+# Alias for intuitive discovery
+LogMelSpectrogramExtractor = AudioFeatureExtractor
+
+__all__ = [
+    "AudioFeatureExtractor",
+    "LogMelSpectrogramExtractor",
+    "KWSAudioDataset",
+    "create_mel_filterbank",
+    "create_dct_matrix",
+]

@@ -58,3 +58,4 @@ if __name__ == "__main__":
             print(f"Config loaded for project: {cfg.get('project', {}).get('name')}")
         print("To run full training on Speech Commands, download dataset first via scripts/download_dataset.py")
         run_smoke_train(args.model_type)
+

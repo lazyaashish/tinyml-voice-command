@@ -31,3 +31,4 @@ if __name__ == "__main__":
     model.eval()
 
     export_model_to_c_header(model, f"{args.model_type}_model_data", args.output)
+
