@@ -37,9 +37,17 @@
 #include <Adafruit_SSD1306.h>
 #include <math.h>
 
-// Include auto-generated model weights and metadata
-#include "../model/model_config.h"
-#include "../model/model_data.h"
+// Include auto-generated model weights and metadata (multi-directory include resolution)
+#if __has_include("../../model/model_config.h")
+  #include "../../model/model_config.h"
+  #include "../../model/model_data.h"
+#elif __has_include("../model/model_config.h")
+  #include "../model/model_config.h"
+  #include "../model/model_data.h"
+#else
+  #include "model_config.h"
+  #include "model_data.h"
+#endif
 
 // ==============================================================================
 // 1. HARDWARE PIN DEFINITIONS (MATCHING PHYSICAL DEV-KIT CIRCUIT)
