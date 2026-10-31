@@ -63,7 +63,7 @@ Because `GO` exceeds our confidence threshold (80%), the ESP32 code immediately 
 ### What is a "MAC"? (Multiply-Accumulate)
 A Multiply-Accumulate operation is the fundamental math step in neural networks:
 $$\text{Output} = \text{Input} \times \text{Weight} + \text{Bias}$$
-When you see that `TinyML_DSCNN` requires **2.06M MACs**, that means the chip performs approximately 2 million multiplications and additions to analyze one second of speech. At 160 MHz, the ESP32 crunches through these 2 million operations in just **7.08 milliseconds**!
+When you see that `TinyML_DSCNN` requires **2.06M MACs**, that means the chip performs approximately 2 million multiplications and additions to analyze one second of speech. At 160 MHz, the theoretical analytical cycle estimate for these operations is just **7.08 milliseconds**!
 
 ### What is INT8 Quantization?
 In Python and PyTorch on your PC, numbers are stored as **32-bit floating point (FP32)** numbers (e.g. `0.84920194`).

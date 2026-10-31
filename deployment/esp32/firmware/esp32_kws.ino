@@ -66,12 +66,12 @@ void onKeywordDetected(const char* keyword, float confidence) {
     Serial.printf(">>> [KEYWORD DETECTED]: %s (%.1f%%) <<<\n", keyword, confidence * 100.0f);
     Serial.printf("========================================\n");
 
-    if (strcmp(keyword, "GO") == 0) {
+    if (strcmp(keyword, "GO") == 0 || strcmp(keyword, "ON") == 0) {
         digitalWrite(PIN_STATUS_LED, HIGH);
         digitalWrite(PIN_RELAY_OUTPUT, HIGH);
         Serial.println("  -> Action: MOTOR ACTIVATED / LED ON");
     } 
-    else if (strcmp(keyword, "STOP") == 0) {
+    else if (strcmp(keyword, "STOP") == 0 || strcmp(keyword, "OFF") == 0) {
         digitalWrite(PIN_STATUS_LED, LOW);
         digitalWrite(PIN_RELAY_OUTPUT, LOW);
         Serial.println("  -> Action: MOTOR HALTED / LED OFF");
@@ -89,6 +89,12 @@ void onKeywordDetected(const char* keyword, float confidence) {
             digitalWrite(PIN_STATUS_LED, LOW);  delay(50);
         }
         Serial.println("  -> Action: STEERING RIGHT (4x Blink)");
+    }
+    else {
+        // Generic acknowledgment for extended commands (YES, NO, UP, DOWN, etc.)
+        digitalWrite(PIN_STATUS_LED, HIGH); delay(150);
+        digitalWrite(PIN_STATUS_LED, LOW);
+        Serial.printf("  -> Action: COMMAND ACKNOWLEDGED (%s)\n", keyword);
     }
 }
 
@@ -171,18 +177,25 @@ void runKWSInference() {
     // Diagnostic heartbeat
     Serial.print(".");
 
-    // Simulated confidence calculation based on spectral energy concentration
-    // (In full TFLite Micro builds, this calls interpreter.Invoke())
-    float class_scores[KWS_NUM_CLASSES] = {0.05f, 0.05f, 0.05f, 0.05f, 0.80f};
-    int best_class_idx = 4; // Default to UNKNOWN
-    float best_confidence = 0.80f;
+    // Default distribution (simulation mode / fallback)
+    float class_scores[KWS_NUM_CLASSES] = {0.0f};
+    int best_class_idx = 0;
+    float best_confidence = 0.0f;
+
+    for (int c = 0; c < KWS_NUM_CLASSES; c++) {
+        if (class_scores[c] > best_confidence) {
+            best_confidence = class_scores[c];
+            best_class_idx = c;
+        }
+    }
 
     // Check cooldown debounce
     unsigned long now = millis();
     if (best_confidence >= DETECTION_THRESHOLD && (now - last_trigger_time > DEBOUNCE_COOLDOWN_MS)) {
-        if (best_class_idx < 4) { // Active command (GO, STOP, LEFT, RIGHT)
+        const char* label = KWS_CLASS_LABELS[best_class_idx];
+        if (strcmp(label, "UNKNOWN") != 0 && strcmp(label, "SILENCE") != 0) {
             last_trigger_time = now;
-            onKeywordDetected(KWS_CLASS_LABELS[best_class_idx], best_confidence);
+            onKeywordDetected(label, best_confidence);
         }
     }
 }
@@ -214,8 +227,11 @@ void setup() {
     // Initialize microphone
     setupI2SMicrophone();
 
-    Serial.println("\n[READY] Listening for voice commands: GO, STOP, LEFT, RIGHT...");
-    Serial.println("[TIP]   You can also type 'go', 'stop', 'left', 'right' in Serial Monitor.");
+    Serial.print("\n[READY] Listening for voice commands: ");
+    for (int i = 0; i < KWS_NUM_CLASSES; i++) {
+        Serial.printf("%s%s", KWS_CLASS_LABELS[i], (i == KWS_NUM_CLASSES - 1) ? "\n" : ", ");
+    }
+    Serial.println("[TIP]   You can also test commands by typing them in the Serial Monitor.");
 }
 
 void loop() {

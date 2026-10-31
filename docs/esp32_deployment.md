@@ -66,7 +66,7 @@ If using an Adafruit SPH0645 or TDK ICS-43434 module:
         │  Spectrogram feature tensor: (1, 49, 40)
         ▼
 [TinyML_DSCNN Quantized Inference]
-        │  28,800 bytes ping-pong tensor arena (~7 ms latency @ 160 MHz)
+        │  28,800 bytes ping-pong tensor arena (~7.08 ms analytical cycle estimate @ 160 MHz)
         ▼
 [Action Dispatcher & Debounce Gate]
         │  Threshold >= 0.80, Cooldown = 500 ms
@@ -100,7 +100,7 @@ pio device monitor -b 115200
 1. Open `deployment/esp32/firmware/esp32_kws.ino`.
 2. Under `Tools`:
    - Board: `ESP32 Dev Module`
-   - CPU Frequency: `160 MHz` (sufficient for 7.08 ms latency) or `240 MHz` (4.72 ms latency)
+   - CPU Frequency: `160 MHz` (sufficient for ~7.08 ms analytical latency) or `240 MHz` (~4.72 ms analytical latency)
    - Core Debug Level: `None` (for minimal overhead)
 3. Click **Upload**.
 

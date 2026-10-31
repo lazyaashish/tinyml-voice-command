@@ -16,6 +16,7 @@ from src.models import (
     TinyML_DSCNN,
     CandF_44ChDualResidual,
     ArmSmallDSCNN,
+    Ext_Mel40_StridedStem_W76,
     CandB_DeepDual48,
     Cand3_InvertedBottleneck,
 )
@@ -53,11 +54,18 @@ def evaluate_checkpoint(checkpoint_path: str, model_type: str = "sih"):
     elif model_type == "cand_3":
         model = Cand3_InvertedBottleneck(num_classes=12)
         in_shape = (1, 1, 49, 10)
+    elif model_type in ["ext_mel40_w76", "w76"]:
+        model = Ext_Mel40_StridedStem_W76(num_classes=12)
+        in_shape = (1, 1, 49, 40)
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
     sd = _load_sd(checkpoint_path)
-    model.load_state_dict(sd)
+    if model_type in ["ext_mel40_w76", "w76"]:
+        sd = {k: v for k, v in sd.items() if not any(x in k for x in ['quant_', 'running_max', 'initialized'])}
+        model.load_state_dict(sd, strict=False)
+    else:
+        model.load_state_dict(sd)
     model.eval()
 
     n_params = sum(p.numel() for p in model.parameters())
@@ -80,7 +88,7 @@ if __name__ == "__main__":
         "--model-type",
         type=str,
         default="sih",
-        choices=["sih", "cand_f", "cand_f_qat", "arm_baseline", "cand_b", "cand_3"],
+        choices=["sih", "cand_f", "cand_f_qat", "arm_baseline", "cand_b", "cand_3", "ext_mel40_w76", "w76"],
     )
     args = parser.parse_args()
     evaluate_checkpoint(args.checkpoint, args.model_type)
