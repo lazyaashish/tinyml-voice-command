@@ -26,45 +26,59 @@ from src.models import (
     TinyML_DSCNN,
     CandF_44ChDualResidual,
     ArmSmallDSCNN,
+    Ext_Mel40_StridedStem_W76,
 )
 
 
 MODELS_CONFIG = [
     {
         "id": "tinyml_dscnn",
-        "name": "TinyML_DSCNN (Recommended)",
+        "name": "TinyML_DSCNN (5-Class Navigation Champion)",
         "class": TinyML_DSCNN,
         "classes": 5,
         "checkpoint": "checkpoints/sih_final_5class.pt",
-        "verified_acc": "96.40% (5-Class)",
-        "esp32_latency_160mhz": "7.08 ms (Hardware Measured)",
-        "esp32_latency_240mhz": "4.72 ms (Hardware Measured)",
+        "verified_acc": "91.66% Test (2,027 clips) / 96.40% Stop-Confidence (40 clips)",
+        "esp32_latency_160mhz": "7.08 ms (Analytical Cycle Estimate)",
+        "esp32_latency_240mhz": "4.72 ms (Analytical Cycle Estimate)",
         "peak_sram_kb": 28.125,
         "sram_basis": "Analytical Ping-Pong Arena (28,800 B)",
         "macs": 2056640,
     },
     {
+        "id": "ext_mel40_w76",
+        "name": "Ext_Mel40_StridedStem_W76 (12-Class 95% Champion)",
+        "class": Ext_Mel40_StridedStem_W76,
+        "classes": 12,
+        "checkpoint": "checkpoints/ext_mel40_w76_champion_95.pt",
+        "verified_acc": "94.99% INT8 Test (4,890 clips) / 95.41% QAT Val",
+        "esp32_latency_160mhz": "13.72 ms (Analytical Cycle Estimate)",
+        "esp32_latency_240mhz": "9.15 ms (Analytical Cycle Estimate)",
+        "peak_sram_kb": 20.000,
+        "sram_basis": "Double-Buffered Peak In-Out (20,448 B)",
+        "macs": 3986688,
+    },
+    {
         "id": "cand_f",
-        "name": "CandF_44ChDualResidual (16KB Champion)",
+        "name": "CandF_44ChDualResidual (12-Class <=16KB Champion)",
         "class": CandF_44ChDualResidual,
         "classes": 12,
         "checkpoint": "checkpoints/cand_f_44ch_champion_fp32.pt",
-        "verified_acc": "92.54% FP32 / 91.62% INT8 (12-Class)",
-        "esp32_latency_160mhz": "4.85 ms (Hardware Measured)",
-        "esp32_latency_240mhz": "3.23 ms (Hardware Measured)",
+        "verified_acc": "92.54% FP32 Test / 91.62% INT8 QAT (4,890 clips)",
+        "esp32_latency_160mhz": "4.85 ms (Analytical Cycle Estimate)",
+        "esp32_latency_240mhz": "3.23 ms (Analytical Cycle Estimate)",
         "peak_sram_kb": 14.703,
         "sram_basis": "Double-Buffered Peak In-Out (15,056 B)",
         "macs": 1406672,
     },
     {
         "id": "arm_small_dscnn",
-        "name": "ArmSmallDSCNN (Arm Baseline)",
+        "name": "ArmSmallDSCNN (12-Class Arm Baseline)",
         "class": ArmSmallDSCNN,
         "classes": 12,
         "checkpoint": "checkpoints/arm_small_dscnn_baseline.pt",
-        "verified_acc": "94.40% (12-Class)",
-        "esp32_latency_160mhz": "18.60 ms (Hardware Measured)",
-        "esp32_latency_240mhz": "12.40 ms (Hardware Measured)",
+        "verified_acc": "94.40% Published / 93.95% Modern Recipe (4,890 clips)",
+        "esp32_latency_160mhz": "18.60 ms (Analytical Cycle Estimate)",
+        "esp32_latency_240mhz": "12.40 ms (Analytical Cycle Estimate)",
         "peak_sram_kb": 46.875,
         "sram_basis": "Analytical Single-Buffer Arena (48,000 B)",
         "macs": 5400000,
@@ -113,7 +127,8 @@ def main():
             sd = torch.load(ckpt_path, map_location="cpu", weights_only=False)
             if isinstance(sd, dict) and "model_state_dict" in sd:
                 sd = sd["model_state_dict"]
-            model.load_state_dict(sd)
+            filtered_sd = {k: v for k, v in sd.items() if not any(x in k for x in ['quant_', 'running_max', 'initialized'])}
+            model.load_state_dict(filtered_sd, strict=False)
 
         model.eval()
 
@@ -161,10 +176,11 @@ def main():
         lat_short = r['esp32_160'].split()[0] + " ms"
         print(f"{name_short:<36} | {r['params']:<8,} | {macs_str:<8} | {int8_str:<10} | {sram_str:<10} | {lat_short:<15}")
 
-    print("\n[NOTE] ESP32 latency values are Hardware Measured on physical ESP32 Xtensa Dual-Core.")
+    print("\n[NOTE] ESP32 latency values are Analytical Cycle Estimates (Total Cycles / CPU Freq) from hardware profiling.")
     print("Peak SRAM values are Double-Buffered Analytical Estimates required for ping-pong tensor arena.")
     print("Host latencies are Host Measured on local CPU.\n")
 
 
 if __name__ == "__main__":
     main()
+

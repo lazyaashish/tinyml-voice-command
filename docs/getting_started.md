@@ -133,3 +133,4 @@ Now that your ESP32 is recognizing speech:
 - **Wire a Relay or Motor**: Check out [examples/gpio_action/](../examples/gpio_action/README.md) and [examples/robot_control/](../examples/robot_control/README.md).
 - **Train Custom Words**: Want the ESP32 to respond to `"LIGHTS ON"`, `"ALARM"`, or your own name? Follow the [Custom Keywords Training Guide](train_custom_keywords.md).
 - **Learn the Technology**: Curious how an 11 KB neural network runs on a microcontroller without the internet? Read [TinyML Basics Explained](tinyml_basics.md).
+

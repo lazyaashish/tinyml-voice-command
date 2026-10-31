@@ -19,3 +19,4 @@ Demonstrates controlling hardware actuators (relays, lamps, motors, solenoids) v
 
 - **Say "GO"** (confidence $\ge 75\%$): GPIO 4 goes HIGH, energizing the relay and turning ON the appliance. Status LED illuminates.
 - **Say "STOP"** (confidence $\ge 75\%$): GPIO 4 goes LOW, de-energizing the relay and turning OFF the appliance. Status LED turns off.
+

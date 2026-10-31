@@ -3,35 +3,41 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-ESP32%20%7C%20ESP32--S3-blue.svg)](https://espressif.com)
 [![Framework](https://img.shields.io/badge/Framework-Arduino%20%7C%20PlatformIO-orange.svg)](deployment/esp32/)
+[![Accuracy](https://img.shields.io/badge/12--Class%20Accuracy-95.0%25-success.svg)](#model-comparison)
 [![Latency](https://img.shields.io/badge/ESP32%20Latency-7.08%20ms%20%40%20160MHz-brightgreen.svg)](#model-comparison)
-[![Accuracy](https://img.shields.io/badge/Accuracy-96.40%25-success.svg)](#model-comparison)
 
 > **Complete, production-ready, autonomous real-time Keyword Spotting (KWS) system for ESP32 microcontrollers.**  
 > Recognizes spoken voice commands 100% on-device with **zero cloud connection**, **zero Wi-Fi latency**, and **complete privacy**.
 
 ---
 
-## 🌟 The Recommended Model: `TinyML_DSCNN`
+## 🌟 Supported Champion Models
 
-If you want voice recognition running on an ESP32 immediately, use our **Recommended Champion Model**:
+Depending on whether your project requires an ultracompact voice-navigation system (e.g. for robots or appliances) or a full 12-keyword vocabulary with $\ge 94\%$ accuracy, the repository provides two pre-trained champion models:
 
-| Property | Value | Notes |
-|:---|:---|:---|
-| **Architecture** | **`TinyML_DSCNN`** | Asymmetric Progressive Depthwise-Separable CNN |
-| **Total Parameters** | **11,409** | Lightweight, compact footprint |
-| **INT8 Quantized Size** | **11.14 KB** (11,409 bytes) | Stored directly in ESP32 Flash memory |
-| **ESP32 Inference Latency** | **7.08 ms** @ 160 MHz<br>**4.72 ms** @ 240 MHz | **Hardware Measured** on physical ESP32 Xtensa Dual-Core |
-| **Peak SRAM Tensor Arena** | **28.125 KB** (28,800 bytes) | Consumes only **8.8%** of ESP32's 320 KB internal SRAM |
-| **Compute Operations** | **2,056,640 MACs** (~2.06M) | 61.9% fewer operations than Arm baseline |
-| **Test Accuracy** | **96.40%** | Tested across thousands of spoken utterances |
-| **Vocabulary** | **`GO`**, **`STOP`**, **`LEFT`**, **`RIGHT`**, **`UNKNOWN`** | Optimized for robotics, appliances, and vehicle navigation |
-| **Deployment Status** | **Pre-quantized & Bundled** | Ready in `deployment/esp32/model/` |
+### Option A: `TinyML_DSCNN` (5-Class Robotics Navigation Champion)
+- **Target Application**: Robotics navigation, toys, voice switches, and home automation.
+- **Vocabulary (5 Classes)**: `GO`, `STOP`, `LEFT`, `RIGHT`, `UNKNOWN`.
+- **Parameters**: **11,409** (11.14 KB INT8 model weights).
+- **Compute**: **2,056,640 MACs** (~2.06M Operations).
+- **Peak SRAM Tensor Arena**: **28.125 KB** (Consumes only **8.8%** of ESP32 SRAM).
+- **ESP32 Inference Latency**: **7.08 ms** @ 160 MHz / **4.72 ms** @ 240 MHz *(Analytical Cycle Estimate)*.
+- **Test Accuracy**: **91.66%** on 2,027 held-out test clips (*96.40% average confidence on physical trials*).
+
+### Option B: `Ext_Mel40_StridedStem_W76` (12-Class High-Accuracy Champion)
+- **Target Application**: Full-featured voice control with standard benchmark vocabulary.
+- **Vocabulary (12 Classes)**: `YES`, `NO`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `ON`, `OFF`, `STOP`, `GO`, `SILENCE`, `UNKNOWN`.
+- **Parameters**: **38,360** (37.46 KB INT8 model weights).
+- **Compute**: **3,986,688 MACs** (~3.99M Operations).
+- **Peak SRAM Tensor Arena**: **20.000 KB** (Fits within standard 25 KB microcontroller limits).
+- **ESP32 Inference Latency**: **13.72 ms** @ 160 MHz / **9.15 ms** @ 240 MHz *(Analytical Cycle Estimate)*.
+- **Test Accuracy**: **94.99% (~95.0%)** on 4,890 untouched test clips (**95.41%** QAT validation).
 
 ---
 
 ## 🚀 Quick Start in 5 Minutes (No TinyML Knowledge Required)
 
-You do **not** need to train models or write neural network code to use this. Pre-quantized model weights and ready-to-flash firmware are already included.
+Pre-quantized model weights and ready-to-flash firmware are already bundled. You do not need to train anything to get started.
 
 ### Step 1: Wire Microphone to ESP32
 
@@ -92,24 +98,23 @@ The entire signal processing and inference chain runs autonomously on the ESP32:
       └─► (RMS >= 150: Active Voice) ────► [40-Band Log-Mel Spectrogram + CMN]
                                                     │
                                                     ▼
-[Hardware Actuator] ◄── [Debounce (500ms)] ◄── [TinyML_DSCNN (7.08 ms)]
- (LED / Relay / Motor)     (Threshold >= 80%)    (11,409 INT8 Weights)
+[Hardware Actuator] ◄── [Debounce (500ms)] ◄── [Quantized Neural Net]
+ (LED / Relay / Motor)     (Threshold >= 80%)    (7.08 ms - 13.72 ms)
 ```
 
 ---
 
 ## 📊 Model Comparison & Architecture Options
 
-We provide three distinct architectures depending on your hardware memory and vocabulary needs:
-
-| Architecture | Parameters | Operations (MACs) | INT8 Model Size | Peak SRAM Tensor Arena | ESP32 Latency @ 160MHz | ESP32 Latency @ 240MHz | Accuracy | Target Vocabulary | Best For |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|:---|
-| ⭐ **`TinyML_DSCNN`** *(Recommended)* | **11,409** | **2.06M** | **11.14 KB** | **28.12 KB** *(Ping-Pong Arena)* | **7.08 ms** *(Measured)* | **4.72 ms** *(Measured)* | **96.40%** | 5 Classes (`GO`, `STOP`, `LEFT`, `RIGHT`, `UNKNOWN`) | **ESP32 Voice Control & Robotics** |
-| **`CandF_44ChDualResidual`** | 16,200 | 1.41M | 15.82 KB | **14.70 KB** *(Double-buffered)* | 4.85 ms *(Measured)* | 3.23 ms *(Measured)* | 92.54% FP32<br>91.62% INT8 | 12 Classes (Speech Commands v0.02) | **$\le 16\text{ KB}$ MCUs (ARM Cortex-M0+/M4)** |
-| **`ArmSmallDSCNN`** *(Baseline)* | 23,180 | 5.40M | 22.64 KB | 46.88 KB *(Single buffer)* | 18.60 ms *(Measured)* | 12.40 ms *(Measured)* | 94.40% | 12 Classes (Speech Commands v0.02) | Academic Baseline Reproduction |
+| Architecture | Vocabulary | Classes | Parameters | Operations (MACs) | INT8 Model Size | Peak SRAM Arena | ESP32 Latency @ 160MHz | Accuracy & Test Split | Target Hardware & Use Case |
+|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---|:---|
+| ⭐ **`TinyML_DSCNN`** | `GO`, `STOP`, `LEFT`, `RIGHT`, `UNKNOWN` | 5 | **11,409** | **2,056,640** (~2.06M) | **11.14 KB** | 28.125 KB *(Ping-Pong Arena)* | **7.08 ms** *(Estimated)* | **91.66%** *(Held-Out Test, 2,027 clips)*<br>96.40% *(Avg Stop Conf, 40 clips)* | **ESP32 Robotics & Voice Navigation** |
+| 🏆 **`Ext_Mel40_StridedStem_W76`** | 10 Words + Silence + Unknown | 12 | **38,360** | **3,986,688** (~3.99M) | **37.46 KB** | **20.000 KB** *(Peak In-Out Buffer)* | **13.72 ms** *(Estimated)* | **94.99% (~95.0%)** *(True INT8 Test, 4,890 clips)*<br>95.41% *(QAT Validation)* | **High-Accuracy 12-Class KWS on ESP32 & MCUs** |
+| ⚡ **`CandF_44ChDualResidual`** | 10 Words + Silence + Unknown | 12 | **16,200** | **1,406,672** (~1.41M) | **15.82 KB** | **14.703 KB** *(Guaranteed ≤ 16 KB)* | **4.85 ms** *(Estimated)* | **92.54%** FP32 / **91.62%** INT8 *(4,890 test clips)* | **Ultra-low SRAM MCUs (ARM Cortex-M0+/M4)** |
+| 📖 **`ArmSmallDSCNN`** | 10 Words + Silence + Unknown | 12 | **23,180** | **5,400,000** (~5.40M) | **22.64 KB** | 46.875 KB *(Single-buffer)* | **18.60 ms** *(Estimated)* | **94.40%** Published / **93.95%** Modern Recipe | Academic Baseline Reproduction |
 
 > [!NOTE]
-> - **ESP32 Latency:** *Hardware Measured* on physical ESP32 Xtensa Dual-Core running bare-metal C++ firmware.
+> - **ESP32 Latency:** *Analytical Cycle Estimate* derived from theoretical layer-by-layer cycle counts divided by clock frequency ($1,132,320\text{ cycles} / 160\text{ MHz} = 7.08\text{ ms}$).
 > - **Peak SRAM:** *Analytical Estimate* of double-buffered scratchpad memory required for intermediate activations.
 > - **Host Latency:** Run `python scripts/benchmark.py` to benchmark on your local host CPU.
 
@@ -127,10 +132,11 @@ python scripts/validate_installation.py
 python scripts/smoke_test.py
 
 # 3. Model Benchmark & Latency Profiler
-python scripts/benchmark.py
+python scripts/benchmark.py --iterations 100
 
-# 4. Export PyTorch Model to C Headers
+# 4. Export Any PyTorch Model to C Headers
 python scripts/export_esp32.py --model tinyml_dscnn --format int8
+python scripts/export_esp32.py --model ext_mel40_w76 --format int8
 
 # 5. Record Custom Audio Samples for Training
 python scripts/record_dataset.py --keyword OPEN --num-samples 30
@@ -191,7 +197,8 @@ sih-esp32-kws/
 ├── requirements.txt                    # Minimal Python dependencies (PyTorch, NumPy, SciPy)
 ├── LICENSE                             # MIT License
 ├── checkpoints/                        # Pretrained model weights
-│   ├── sih_final_5class.pt             # ⭐ Recommended TinyML_DSCNN (11,409 params, 96.40% acc)
+│   ├── sih_final_5class.pt             # ⭐ Recommended TinyML_DSCNN (11,409 params, 5-class navigation)
+│   ├── ext_mel40_w76_champion_95.pt    # 🏆 High-Accuracy Ext_Mel40_W76 (38,360 params, 12-class 95% acc)
 │   ├── cand_f_44ch_champion_fp32.pt    # CandF 16 KB SRAM FP32 champion (16,200 params)
 │   ├── cand_f_qat_champion_int8.pt     # CandF 16 KB SRAM INT8 QAT champion (16,200 params)
 │   └── arm_small_dscnn_baseline.pt     # Arm Small DS-CNN baseline (23,180 params)
@@ -232,7 +239,7 @@ sih-esp32-kws/
 │   ├── quantization/                   # INT8 QAT and fake quantization modules
 │   ├── training/                       # Training engine
 │   └── inference/                      # Real-time inference utilities
-└── tests/                              # Automated test suite (11/11 passing)
+└── tests/                              # Automated test suite (12/12 passing)
 ```
 
 ---

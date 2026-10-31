@@ -27,6 +27,7 @@ from src.models import (
     TinyML_DSCNN,
     CandF_44ChDualResidual,
     ArmSmallDSCNN,
+    Ext_Mel40_StridedStem_W76,
 )
 
 
@@ -68,6 +69,20 @@ MODEL_REGISTRY = {
         "time_frames": 49,
         "macs": 5400000,
         "arena_bytes": 48000,
+        "feature_type": "LOG_MEL_40",
+    },
+    "ext_mel40_w76": {
+        "display_name": "Ext_Mel40_StridedStem_W76",
+        "class": Ext_Mel40_StridedStem_W76,
+        "default_classes": [
+            "SILENCE", "UNKNOWN", "YES", "NO", "UP", "DOWN",
+            "LEFT", "RIGHT", "ON", "OFF", "STOP", "GO"
+        ],
+        "default_checkpoint": os.path.join(REPO_ROOT, "checkpoints", "ext_mel40_w76_champion_95.pt"),
+        "mel_bins": 40,
+        "time_frames": 49,
+        "macs": 3986688,
+        "arena_bytes": 20448,
         "feature_type": "LOG_MEL_40",
     },
 }
@@ -232,7 +247,8 @@ def main():
     sd = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     if isinstance(sd, dict) and "model_state_dict" in sd:
         sd = sd["model_state_dict"]
-    model.load_state_dict(sd)
+    filtered_sd = {k: v for k, v in sd.items() if not any(x in k for x in ['quant_', 'running_max', 'initialized'])}
+    model.load_state_dict(filtered_sd, strict=False)
     model.eval()
 
     total_params = sum(p.numel() for p in model.parameters())

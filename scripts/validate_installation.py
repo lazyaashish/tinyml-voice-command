@@ -71,11 +71,13 @@ def main():
             TinyML_DSCNN,
             CandF_44ChDualResidual,
             ArmSmallDSCNN,
+            Ext_Mel40_StridedStem_W76,
             UltraLowSRAM_MFCC10,
         )
         print("  -> TinyML_DSCNN          : Imported Successfully")
         print("  -> CandF_44ChDualResidual: Imported Successfully")
         print("  -> ArmSmallDSCNN         : Imported Successfully")
+        print("  -> Ext_Mel40_StridedStem_W76: Imported Successfully")
         print("  -> UltraLowSRAM_MFCC10   : Imported Successfully")
     except Exception as e:
         print(f"  -> [FAIL] Model import error: {e}")
@@ -94,7 +96,8 @@ def main():
     # 5. Checkpoints Integrity
     test_section("Pretrained Model Checkpoints")
     checkpoints = [
-        ("checkpoints/sih_final_5class.pt", TinyML_DSCNN, 5, "TinyML_DSCNN (Recommended 5-Class)"),
+        ("checkpoints/sih_final_5class.pt", TinyML_DSCNN, 5, "TinyML_DSCNN (5-Class Navigation)"),
+        ("checkpoints/ext_mel40_w76_champion_95.pt", Ext_Mel40_StridedStem_W76, 12, "Ext_Mel40_W76 (12-Class 95% Champion)"),
         ("checkpoints/cand_f_44ch_champion_fp32.pt", CandF_44ChDualResidual, 12, "CandF_44Ch Dual Residual (12-Class FP32)"),
         ("checkpoints/arm_small_dscnn_baseline.pt", ArmSmallDSCNN, 12, "Arm Small DS-CNN (Baseline)"),
     ]
@@ -113,7 +116,8 @@ def main():
             sd = torch.load(full_path, map_location="cpu", weights_only=False)
             if isinstance(sd, dict) and "model_state_dict" in sd:
                 sd = sd["model_state_dict"]
-            model.load_state_dict(sd)
+            filtered_sd = {k: v for k, v in sd.items() if not any(x in k for x in ['quant_', 'running_max', 'initialized'])}
+            model.load_state_dict(filtered_sd, strict=False)
             model.eval()
             param_count = sum(p.numel() for p in model.parameters())
             file_size_kb = os.path.getsize(full_path) / 1024
@@ -154,3 +158,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -133,3 +133,4 @@ To maximize battery efficiency and prevent unnecessary neural network execution 
 #define DEBOUNCE_COOLDOWN_MS 500
 ```
 - Prevents double-triggering when an elongated utterance (e.g. *"Stoooop"*) spans multiple consecutive sliding analysis frames.
+

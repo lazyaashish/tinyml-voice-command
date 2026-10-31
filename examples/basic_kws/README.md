@@ -25,3 +25,4 @@ A minimal starter sketch demonstrating I2S digital microphone input and serial m
 4. Click Upload.
 5. Open Serial Monitor at **115200 baud**.
 6. Speak towards the INMP441 microphone and observe voice activity detections printed in real time.
+

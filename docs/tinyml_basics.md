@@ -78,3 +78,4 @@ Instead, TinyML uses a single static block of memory called a **Tensor Arena**:
 - Layer 1 reads from Buffer A and writes its results into Buffer B.
 - Layer 2 reads from Buffer B and writes its results back into Buffer A.
 - This "ping-pong" mechanism guarantees that peak SRAM usage never exceeds **28.1 KB**, leaving the rest of the ESP32's 320 KB SRAM completely free.
+

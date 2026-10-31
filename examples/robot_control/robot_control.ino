@@ -90,3 +90,4 @@ void loop() {
     // directly by the real-time inference loop in deployment/esp32/firmware/esp32_kws.ino
     delay(100);
 }
+

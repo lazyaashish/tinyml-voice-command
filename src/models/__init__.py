@@ -11,6 +11,7 @@ from .cand_f import (
     Cand2_DualResidual,
 )
 from .arm_baseline import ArmSmallDSCNN
+from .ext_mel40_w76 import Ext_Mel40_StridedStem_W76
 from .low_sram_candidates import LowSRAM_SE, LowSRAM_TimeFirst
 from .ultra_low_sram import UltraLowSRAM_MFCC10
 
@@ -24,6 +25,7 @@ __all__ = [
     "Cand1_LateCapacity",
     "Cand2_DualResidual",
     "ArmSmallDSCNN",
+    "Ext_Mel40_StridedStem_W76",
     "LowSRAM_SE",
     "LowSRAM_TimeFirst",
     "UltraLowSRAM_MFCC10",

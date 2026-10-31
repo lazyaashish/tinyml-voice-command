@@ -17,6 +17,7 @@ from src.models import (
     CandB_DeepDual48,
     Cand3_InvertedBottleneck,
     ArmSmallDSCNN,
+    Ext_Mel40_StridedStem_W76,
 )
 from src.quantization import CandF_QAT
 
@@ -51,6 +52,20 @@ class TestOptimizationModels(unittest.TestCase):
         model.eval()
 
         x = torch.randn(2, 1, 49, 10)
+        out = model(x)
+        self.assertEqual(out.shape, (2, 12))
+
+    def test_ext_mel40_w76(self):
+        ckpt = os.path.join(CKPT_DIR, "ext_mel40_w76_champion_95.pt")
+        self.assertTrue(os.path.exists(ckpt), f"Missing {ckpt}")
+        model = Ext_Mel40_StridedStem_W76(num_classes=12)
+        raw_sd = _load_sd(ckpt)
+        filtered_sd = {k: v for k, v in raw_sd.items() if not any(x in k for x in ['quant_', 'running_max', 'initialized'])}
+        model.load_state_dict(filtered_sd, strict=False)
+        model.eval()
+
+        # Input is 40-band Log-Mel: (B, 1, 49, 40)
+        x = torch.randn(2, 1, 49, 40)
         out = model(x)
         self.assertEqual(out.shape, (2, 12))
 

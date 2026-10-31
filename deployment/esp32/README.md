@@ -148,3 +148,4 @@ To tune sensitivity:
 | **Brownout detector triggered / reboot loop** | USB port unable to provide peak current | Use a powered USB hub or shorter USB data cable. |
 | **Upload failure (`A fatal error occurred: Failed to connect to ESP32`)** | Bootloader pin strapping | Hold the **BOOT** button on the ESP32 board while clicking Upload, release once writing begins. |
 | **Compilation error: `model_data.h not found`** | Incorrect relative include path | Keep `esp32_kws.ino` in `firmware/` and `model_data.h` in `model/`, or put both in the same folder. |
+

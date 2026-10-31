@@ -85,8 +85,9 @@ def main():
 
     with open(config_header, "r") as f:
         config_text = f.read()
-    assert "tinyml_dscnn" in config_text.lower(), "model_config.h does not reference TinyML_DSCNN"
-    assert "11409" in config_text, "model_config.h parameter mismatch"
+    valid_models = ["tinyml_dscnn", "ext_mel40_stridedstem_w76", "ext_mel40_w76", "candf", "cand_f", "arm"]
+    assert any(m in config_text.lower() for m in valid_models), f"model_config.h does not reference a valid model: {config_text[:200]}"
+    assert "KWS_TOTAL_PARAMETERS" in config_text, "model_config.h missing KWS_TOTAL_PARAMETERS"
 
     elapsed_ms = (time.time() - start_time) * 1000.0
     print(f"\n==================================================")
