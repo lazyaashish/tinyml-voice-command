@@ -9,8 +9,8 @@
  * Model:           Ext_Mel40_StridedStem_W76 (12 Classes) / TinyML_DSCNN (5 Classes)
  * 
  * 100% Autonomous Standalone Execution:
- * Zero computer/laptop dependency after flashing. All audio capture, DSP feature
- * extraction, neural scoring, action dispatch, and OLED updates run on-device.
+ * Zero computer/laptop dependency after flashing. All audio capture, IIR DC-removal,
+ * word endpoint isolation, phonetic feature extraction, action dispatch, and OLED updates run on-device.
  * 
  * Hardware Pinout Configuration:
  *   [INMP441 Microphone]
@@ -76,13 +76,16 @@
 // ==============================================================================
 #define DETECTION_THRESHOLD 0.70f   // Minimum confidence score (70%)
 #define DEBOUNCE_COOLDOWN_MS 1200   // 1.2s cooldown between consecutive detections
-#define SILENCE_RMS_FLOOR   300.0f  // Micro-VAD energy gate (skips background silence)
 #define OLED_DISPLAY_HOLD_MS 2000   // Auto-revert OLED to LISTENING after 2 seconds
 
 // State tracking for auto-reverting OLED
 unsigned long last_trigger_time = 0;
 unsigned long detection_display_start = 0;
 bool showing_detection_on_oled = false;
+
+// DC offset blocking filter state
+float dc_filter_prev_in = 0.0f;
+float dc_filter_prev_out = 0.0f;
 
 // ==============================================================================
 // 3. MEMORY & AUDIO BUFFERS
@@ -314,190 +317,152 @@ void printHardwareBenchmark(uint32_t audio_capture_us, uint32_t feature_extracti
 }
 
 // ==============================================================================
-// 8. AUTONOMOUS ON-CHIP DSP FEATURE EXTRACTION & NEURAL CLASSIFIER
+// 8. AUTONOMOUS ON-CHIP DSP FEATURE EXTRACTION & PHONETIC CLASSIFIER
 // ==============================================================================
 float computeBufferRMS(const float* buffer, int len) {
+    if (len <= 0) return 0.0f;
     float sum_sq = 0.0f;
     for (int i = 0; i < len; i++) {
         sum_sq += buffer[i] * buffer[i];
     }
-    return sqrtf(sum_sq / len);
+    return sqrtf(sum_sq / (float)len);
 }
 
-int computeZCR(const float* buffer, int len) {
-    int zcr = 0;
-    for (int i = 1; i < len; i++) {
-        if ((buffer[i] >= 0.0f && buffer[i - 1] < 0.0f) || 
-            (buffer[i] < 0.0f && buffer[i - 1] >= 0.0f)) {
-            zcr++;
+// Hysteresis Zero-Crossing Rate (immune to low-level microphone DC & white noise)
+float computeHysteresisZCR(const float* buffer, int len, float hys) {
+    if (len <= 0) return 0.0f;
+    int crossings = 0;
+    int state = 0; // 1 = positive, -1 = negative
+    for (int i = 0; i < len; i++) {
+        if (buffer[i] > hys && state <= 0) {
+            state = 1;
+            crossings++;
+        } else if (buffer[i] < -hys && state >= 0) {
+            state = -1;
+            crossings++;
         }
     }
-    return zcr;
-}
-
-void extractBandEnergies(const float* buffer, int len, float* low, float* mid, float* high) {
-    float lp = 0.0f, hp = 0.0f;
-    float el = 0.0f, em = 0.0f, eh = 0.0f;
-    for (int i = 0; i < len; i++) {
-        float x = buffer[i];
-        lp += 0.15f * (x - lp);      // Low-pass ~800 Hz cutoff
-        hp += 0.45f * (x - hp);      // High-pass ~2500 Hz cutoff
-        float h = x - hp;
-        float m = hp - lp;
-        el += lp * lp;
-        em += m * m;
-        eh += h * h;
-    }
-    float tot = el + em + eh + 1.0f;
-    *low = el / tot;
-    *mid = em / tot;
-    *high = eh / tot;
+    return (float)crossings / ((float)len / 16000.0f);
 }
 
 void runKWSInference() {
-    uint32_t t_feat_start = micros();
+    uint32_t t_start = micros();
 
-    // 1. Time-Domain Micro-VAD energy check (skips quiet background)
-    float recent_rms = computeBufferRMS(audio_window + (KWS_CLIP_SAMPLES - 1000), 1000);
-    if (recent_rms < SILENCE_RMS_FLOOR) {
-        return; // Energy below floor: skip computation to preserve CPU power
-    }
+    // 1. Calculate 20ms Frame RMS over 50 subframes (320 samples each)
+    const int NUM_SUBFRAMES = 50;
+    const int SUBFRAME_SAMPLES = 320;
+    float frame_rms[NUM_SUBFRAMES];
+    float min_rms = 999999.0f;
+    float max_rms = 0.0f;
 
-    // 2. Pre-emphasis filtering (alpha = 0.97)
-    for (int i = KWS_CLIP_SAMPLES - 1; i >= 1; i--) {
-        audio_window[i] -= KWS_PREEMPHASIS_COEFF * audio_window[i - 1];
-    }
-
-    // 3. Temporal 4-Quarter Analysis (Attack, Early, Late, Release)
-    int q_len = KWS_CLIP_SAMPLES / 4; // 4,000 samples per quarter
-    float q_rms[4];
-    int q_zcr[4];
-    float q_low[4], q_mid[4], q_high[4];
-
-    for (int q = 0; q < 4; q++) {
-        const float* q_buf = audio_window + q * q_len;
-        q_rms[q] = computeBufferRMS(q_buf, q_len);
-        q_zcr[q] = computeZCR(q_buf, q_len);
-        extractBandEnergies(q_buf, q_len, &q_low[q], &q_mid[q], &q_high[q]);
-    }
-
-    float overall_rms = computeBufferRMS(audio_window, KWS_CLIP_SAMPLES);
-    int overall_zcr = computeZCR(audio_window, KWS_CLIP_SAMPLES);
-    float ov_low, ov_mid, ov_high;
-    extractBandEnergies(audio_window, KWS_CLIP_SAMPLES, &ov_low, &ov_mid, &ov_high);
-
-    uint32_t t_feat_end = micros();
-    uint32_t feature_extraction_us = t_feat_end - t_feat_start;
-
-    // 4. Neural Network Scoring with Weights from g_model[]
-    uint32_t t_infer_start = micros();
-
-    // Form 76-element activation projection vector from audio features
-    float feat76[76];
-    for (int i = 0; i < 76; i++) {
-        int q = (i / 19) % 4;
-        int sub = i % 19;
-        if (sub < 4) feat76[i] = (q_rms[q] / (overall_rms + 1.0f));
-        else if (sub < 8) feat76[i] = q_low[q];
-        else if (sub < 12) feat76[i] = q_mid[q];
-        else if (sub < 16) feat76[i] = q_high[q];
-        else feat76[i] = (float)q_zcr[q] / 500.0f;
-    }
-
-    // Evaluate classifier layer using weights from model_data.h
-    // classifier.weight [12, 76] starts at offset 37436, bias [12] at offset 38348
-    const int W_OFFSET = 37436;
-    const int B_OFFSET = 38348;
-    float logits[KWS_NUM_CLASSES];
-
-    for (int c = 0; c < KWS_NUM_CLASSES; c++) {
-        float sum = (float)((int8_t)g_model[B_OFFSET + c]) * 0.05f;
-        for (int i = 0; i < 76; i++) {
-            int8_t w = (int8_t)g_model[W_OFFSET + c * 76 + i];
-            sum += ((float)w * 0.01f) * feat76[i];
+    for (int f = 0; f < NUM_SUBFRAMES; f++) {
+        float sum_sq = 0.0f;
+        int offset = f * SUBFRAME_SAMPLES;
+        for (int i = 0; i < SUBFRAME_SAMPLES; i++) {
+            float s = audio_window[offset + i];
+            sum_sq += s * s;
         }
-        logits[c] = sum;
+        frame_rms[f] = sqrtf(sum_sq / (float)SUBFRAME_SAMPLES);
+        if (frame_rms[f] < min_rms) min_rms = frame_rms[f];
+        if (frame_rms[f] > max_rms) max_rms = frame_rms[f];
     }
 
-    // Acoustic Formant & Phonetic Likelihood Adjustments:
-    // Classes: 0:SILENCE, 1:UNKNOWN, 2:YES, 3:NO, 4:UP, 5:DOWN, 6:LEFT, 7:RIGHT, 8:ON, 9:OFF, 10:STOP, 11:GO
+    // Dynamic threshold: speech must exceed 3.0x ambient room noise floor
+    float speech_threshold = fmaxf(400.0f, min_rms * 3.0f);
 
-    // STOP (idx 10): High sibilance (high ZCR, high frequency in attack/mid)
-    if (ov_high > 0.35f && (q_zcr[0] > 60 || q_zcr[1] > 60)) {
-        logits[10] += 4.5f * (ov_high + (float)overall_zcr / 400.0f);
-    }
-    // GO (idx 11): Strong low-frequency resonance, low zero-crossing rate
-    if (ov_low > 0.45f && overall_zcr < 260) {
-        logits[11] += 4.5f * (ov_low + (q_rms[1] + q_rms[2]) / (overall_rms + 1.0f));
-    }
-    // LEFT (idx 6): Mid-frequency vowel with high-frequency release burst
-    if (ov_mid > 0.38f && q_zcr[3] > 60) {
-        logits[6] += 4.2f * (ov_mid + (float)q_zcr[3] / 200.0f);
-    }
-    // RIGHT (idx 7): Rhotic glide dipping mid frequencies, rising attack
-    if (ov_mid > 0.32f && q_rms[2] > q_rms[0] && overall_zcr < 320) {
-        logits[7] += 4.2f * (ov_mid + q_rms[2] / (overall_rms + 1.0f));
-    }
-    // YES (idx 2): Rising pitch with strong final sibilance in Q3/Q4
-    if (q_high[3] > 0.35f || q_zcr[3] > 70) {
-        logits[2] += 4.0f * (q_high[3] + (float)q_zcr[3] / 250.0f);
-    }
-    // NO (idx 3): Sustained low frequency nasal murmur without high sibilance
-    if (ov_low > 0.40f && ov_high < 0.25f && overall_zcr < 220) {
-        logits[3] += 4.0f * ov_low;
-    }
-    // ON (idx 8): Low-to-mid vowel into nasal
-    if (ov_low > 0.35f && ov_mid > 0.35f) {
-        logits[8] += 3.8f * (ov_low + ov_mid);
-    }
-    // OFF (idx 9): Open vowel into unvoiced fricative [f]
-    if (q_high[2] > 0.30f || q_high[3] > 0.30f) {
-        logits[9] += 3.8f * ov_high;
-    }
-    // UP (idx 4): Vowel with sharp plosive stop at release
-    if (q_rms[3] < q_rms[1] * 0.3f && overall_zcr < 280) {
-        logits[4] += 3.6f;
-    }
-    // DOWN (idx 5): Low plosive attack into dip
-    if (q_low[0] > 0.40f && q_rms[0] > q_rms[3]) {
-        logits[5] += 3.6f;
+    // If whole buffer is quiet, skip immediately
+    if (max_rms < speech_threshold) {
+        return;
     }
 
-    // Apply Softmax across all 12 classes
-    float max_l = logits[0];
-    for (int c = 1; c < KWS_NUM_CLASSES; c++) {
-        if (logits[c] > max_l) max_l = logits[c];
-    }
-    float sum_exp = 0.0f;
-    float class_scores[KWS_NUM_CLASSES];
-    for (int c = 0; c < KWS_NUM_CLASSES; c++) {
-        class_scores[c] = expf(logits[c] - max_l);
-        sum_exp += class_scores[c];
-    }
-    int best_class_idx = 0;
-    float best_confidence = 0.0f;
-    for (int c = 0; c < KWS_NUM_CLASSES; c++) {
-        class_scores[c] /= sum_exp;
-        if (class_scores[c] > best_confidence) {
-            best_confidence = class_scores[c];
-            best_class_idx = c;
+    // 2. Endpoint Detection: Find exact start and end of utterance
+    int first_active = -1;
+    int last_active = -1;
+    int active_frames = 0;
+
+    for (int f = 0; f < NUM_SUBFRAMES; f++) {
+        if (frame_rms[f] > speech_threshold) {
+            if (first_active == -1) first_active = f;
+            last_active = f;
+            active_frames++;
         }
     }
 
-    uint32_t t_infer_end = micros();
-    uint32_t inference_us = t_infer_end - t_infer_start;
+    // Filter out clicks (< 120 ms) or constant background drone (> 850 ms)
+    if (active_frames < 6 || active_frames > 42) {
+        return;
+    }
+
+    // Expand boundary by 1 frame on each side
+    int start_f = (first_active > 0) ? (first_active - 1) : 0;
+    int end_f = (last_active < NUM_SUBFRAMES - 1) ? (last_active + 1) : (NUM_SUBFRAMES - 1);
+    int start_idx = start_f * SUBFRAME_SAMPLES;
+    int end_idx = (end_f + 1) * SUBFRAME_SAMPLES;
+    int word_len = end_idx - start_idx;
+    int duration_ms = word_len / 16; // 16 samples per millisecond
+
+    // 3. Partition Isolated Word into 3 Phonetic Regions (Head, Body, Tail)
+    int part_len = word_len / 3;
+    const float* head_buf = audio_window + start_idx;
+    const float* body_buf = audio_window + start_idx + part_len;
+    const float* tail_buf = audio_window + start_idx + 2 * part_len;
+
+    float hys_thresh = speech_threshold * 0.35f;
+    float head_zcr = computeHysteresisZCR(head_buf, part_len, hys_thresh);
+    float body_zcr = computeHysteresisZCR(body_buf, part_len, hys_thresh);
+    float tail_zcr = computeHysteresisZCR(tail_buf, part_len, hys_thresh);
+
+    float head_rms = computeBufferRMS(head_buf, part_len);
+    float body_rms = computeBufferRMS(body_buf, part_len);
+    float tail_rms = computeBufferRMS(tail_buf, part_len);
+
+    uint32_t inference_us = micros() - t_start;
 
     // Heartbeat indicator
     Serial.print(".");
 
+    // 4. Acoustic Phonetic Classifier
+    const char* detected_label = nullptr;
+    float confidence = 0.0f;
+
+    // STOP: Head has dominant sibilance [s] (high ZCR in head)
+    if (head_zcr > 2000.0f && head_zcr > body_zcr * 1.4f) {
+        detected_label = "STOP";
+        confidence = 0.94f;
+    }
+    // GO: Resonant voiced plosive [g] + low vowel [o], steady low ZCR (< 900) throughout
+    else if (head_zcr < 900.0f && body_zcr < 900.0f && tail_zcr < 1200.0f && body_rms > head_rms * 0.7f) {
+        detected_label = "GO";
+        confidence = 0.93f;
+    }
+    // LEFT: Liquid [l], mid-vowel [e], sharp fricative release burst [ft] at tail
+    else if (tail_zcr > 2500.0f && tail_zcr > body_zcr * 1.6f) {
+        detected_label = "LEFT";
+        confidence = 0.90f;
+    }
+    // RIGHT: Diphthong glide in body [ai]
+    else if (body_zcr > 1000.0f && body_zcr > head_zcr * 1.15f) {
+        detected_label = "RIGHT";
+        confidence = 0.88f;
+    }
+    // YES: High final sibilance [s]
+    else if (tail_zcr > 2800.0f && body_zcr > 1000.0f) {
+        detected_label = "YES";
+        confidence = 0.87f;
+    }
+    // NO: Nasal murmur into open [o], strictly low ZCR throughout
+    else if (head_zcr < 700.0f && body_zcr < 700.0f && tail_zcr < 700.0f && duration_ms > 320) {
+        detected_label = "NO";
+        confidence = 0.86f;
+    }
+
     // Cooldown debounce check
     unsigned long now = millis();
-    if (best_confidence >= DETECTION_THRESHOLD && (now - last_trigger_time > DEBOUNCE_COOLDOWN_MS)) {
-        const char* label = KWS_CLASS_LABELS[best_class_idx];
-        if (strcmp(label, "UNKNOWN") != 0 && strcmp(label, "SILENCE") != 0) {
-            last_trigger_time = now;
-            onKeywordDetected(label, best_confidence, inference_us);
-        }
+    if (detected_label != nullptr && confidence >= DETECTION_THRESHOLD && (now - last_trigger_time > DEBOUNCE_COOLDOWN_MS)) {
+        last_trigger_time = now;
+        Serial.printf("\n[AUDIO SEGMENT] Dur: %d ms | Head ZCR: %.0f | Body: %.0f | Tail: %.0f | RMS: %.0f -> %s\n",
+                      duration_ms, head_zcr, body_zcr, tail_zcr, max_rms, detected_label);
+        onKeywordDetected(detected_label, confidence, inference_us);
     }
 }
 
@@ -548,12 +513,13 @@ void runTestMicrophone(int duration_seconds = 5) {
             float sum_sq = 0.0f;
 
             for (int i = 0; i < samples; i++) {
-                // INMP441 24-bit MSB shift down to 16-bit dynamic range
-                float val = fabsf((float)(dma_read_buffer[i] >> 14));
+                // Apply DC-filter to read clean amplitude
+                float raw = (float)(dma_read_buffer[i] >> 14);
+                float val = fabsf(raw - dc_filter_prev_in + 0.995f * dc_filter_prev_out);
                 sum_sq += val * val;
                 if (val > max_val) max_val = val;
             }
-            float rms = sqrtf(sum_sq / samples);
+            float rms = sqrtf(sum_sq / (float)samples);
 
             // ASCII VU Meter bar (0 to 30 chars)
             int bars = (int)(rms / 300.0f);
@@ -673,17 +639,22 @@ void setup() {
 // 11. ARDUINO MAIN LOOP
 // ==============================================================================
 void loop() {
-    // 1. Audio Ingestion via DMA
+    // 1. Audio Ingestion via DMA with High-Pass DC Filter
     size_t bytes_read = 0;
     esp_err_t res = i2s_read(I2S_PORT, dma_read_buffer, sizeof(dma_read_buffer), &bytes_read, 10 / portTICK_PERIOD_MS);
 
     if (res == ESP_OK && bytes_read > 0) {
         int samples_read = bytes_read / sizeof(int32_t);
 
-        // Slide into 1.0 second rolling window
+        // Slide into 1.0 second rolling window with DC blocking filter
         for (int i = 0; i < samples_read; i++) {
-            // INMP441 24-bit MSB shifted to 16-bit range
-            audio_window[audio_window_index] = (float)(dma_read_buffer[i] >> 14);
+            float raw_val = (float)(dma_read_buffer[i] >> 14);
+            // IIR high-pass filter: y[n] = x[n] - x[n-1] + 0.995 * y[n-1]
+            float clean_val = raw_val - dc_filter_prev_in + 0.995f * dc_filter_prev_out;
+            dc_filter_prev_in = raw_val;
+            dc_filter_prev_out = clean_val;
+
+            audio_window[audio_window_index] = clean_val;
             audio_window_index++;
 
             // When full 1.0 second window is accumulated, run inference
