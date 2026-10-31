@@ -1,0 +1,36 @@
+# SIH 2026 Embedded Voice Keyword Spotting Configuration
+project:
+  name: "sih-esp32-kws"
+  problem_statement: "SIH-172"
+  target_hardware: "ESP32 Xtensa Dual-Core (160/240 MHz)"
+
+audio:
+  sample_rate: 16000
+  clip_duration_ms: 1000
+  window_size_ms: 30
+  hop_size_ms: 20
+  feature_type: "log_mel"
+  n_mels: 40
+  pre_emphasis: 0.97
+  use_cmn: true
+  use_micro_vad: true
+
+model:
+  architecture: "TinyML_DSCNN"
+  num_classes: 5
+  classes: ["GO", "STOP", "LEFT", "RIGHT", "UNKNOWN"]
+  stem_kernel: [10, 4]
+  stem_channels: 28
+  ds_blocks:
+    - [32, 1]
+    - [48, 2]
+    - [48, 1]
+    - [64, 1]
+  total_params: 11409
+
+training:
+  batch_size: 64
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  lr_scheduler: "cosine"

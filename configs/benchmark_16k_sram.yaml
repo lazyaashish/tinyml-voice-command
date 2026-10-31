@@ -1,0 +1,26 @@
+# Academic Benchmark: <= 16 KB Static SRAM Optimization Configuration
+project:
+  name: "tinyml-kws-sram-optimization"
+  benchmark: "Google Speech Commands v0.02"
+  hard_sram_ceiling_bytes: 16384
+
+audio:
+  sample_rate: 16000
+  clip_duration_ms: 1000
+  window_size_ms: 40
+  hop_size_ms: 20
+  feature_type: "mfcc"
+  n_mfcc: 10
+
+model:
+  architecture: "CandF_44ChDualResidual"
+  num_classes: 12
+  channels: 44
+  total_params: 16200
+  peak_sram_arena_bytes: 15056
+  total_macs: 1406672
+
+quantization:
+  engine: "QAT"
+  precision: "int8_symmetric"
+  calibration_samples: 500

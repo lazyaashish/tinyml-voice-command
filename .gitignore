@@ -1,0 +1,29 @@
+# Python environments & caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Large audio datasets (download via scripts/download_dataset.py)
+dataset/
+data/raw/
+*.wav
+*.tar.gz
+*.zip
+
+# Intermediate training artifacts & logs
+runs/
+wandb/
+tensorboard/
+*.log
+
+# IDE & OS
+.ipynb_checkpoints
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,35 @@
+{
+  "model_name": "CandF_44ChDualResidual",
+  "fp32_test_accuracy": 92.5358,
+  "integer_style_simulation_accuracy": 91.0225,
+  "quantization_drop_percentage_points": 1.5133,
+  "static_sram_arena_harness_bytes": 15056,
+  "static_sram_arena_harness_kb": 14.7,
+  "hard_sram_ceiling_bytes": 16000,
+  "headroom_bytes": 944,
+  "verdicts": {
+    "fp32_model_status": "VALID (Fits analytical static arena <= 16,000 bytes with 944 B headroom)",
+    "quantized_deployment_status": "SIMULATED (1.51 percentage-point simulated quantization loss under static PTQ integer simulation)",
+    "hardware_deployment_status": "NOT HARDWARE-TESTED (No physical ESP32 available; evaluated via host PC integer-quantization simulation and static arena harness)"
+  },
+  "flash_accounting": {
+    "trainable_fp32_parameters": 16200,
+    "fp32_storage_bytes": 64800,
+    "raw_conv_weights_bytes": 12164,
+    "raw_se_weights_bytes": 2344,
+    "raw_fc_weights_bytes": 768,
+    "total_raw_int8_weights_bytes": 15276,
+    "folded_bias_bytes": 1872,
+    "requant_multipliers_bytes": 1824,
+    "requant_shifts_bytes": 456,
+    "quant_metadata_bytes": 989,
+    "total_binary_firmware_payload_bytes": 20417,
+    "total_binary_firmware_payload_kb": 19.94,
+    "header_text_file_disk_bytes": 92046,
+    "storage_reduction_vs_fp32_percent": 68.49
+  },
+  "latency_accounting": {
+    "host_pc_inference_ms": 0.47,
+    "theoretical_esp32_estimate_ms": 39.9
+  }
+}

@@ -1,0 +1,17 @@
+Model,Feature_Type,Val_Accuracy,Test_Accuracy,Parameters,INT8_Flash_KB,Peak_SRAM_KB,Total_MACs,CPU_Latency_ms,ESP32_Latency_ms,Status
+Arm Small DS-CNN (Original Paper),mfcc10,92.80,94.40,24100,21.51,16.00,2656768,12.000,66.42,Published Benchmark
+Arm Small DS-CNN (Repro Original Recipe),mfcc10,92.80,92.45,23180,22.64,15.62,2656768,0.901,66.42,Reproduction
+Arm Small DS-CNN (Repro Improved Recipe),mfcc10,94.24,93.95,23180,22.64,15.62,2656768,0.604,66.42,Accuracy Ceiling
+Progressive DS-CNN (Original Paper Track 1B),mel40_cmn,89.60,89.08,11864,11.59,30.00,2057088,0.881,51.43,Prior Report
+Progressive DS-CNN (Exp 2 Improved Recipe),mel40_cmn,91.27,90.88,11864,11.59,30.00,2057088,0.726,51.43,Pareto Winner (30KB SRAM)
+Progressive_BottleneckResidual (Cand 2),mel40_cmn,90.28,89.51,10708,10.46,30.00,1803648,1.031,45.09,Min Flash Winner
+LowSRAM_Candidate_1,mel40_cmn,90.98,89.78,11524,11.25,22.50,1665408,0.625,41.64,Superseded
+LowSRAM_SE (Previous Best 22.5KB),mel40_cmn,91.43,90.22,14084,13.75,22.50,1667968,0.781,41.70,Pareto Winner (22.5KB SRAM)
+se_b2 (SE Block 2 Only),mel40_cmn,91.59,89.86,12292,12.00,22.50,1666176,0.742,41.65,Top Val Acc (12.3k)
+LowSRAM_TemporalKernel,mel40_cmn,91.20,90.12,12148,11.86,22.50,1757568,0.906,43.94,Compact Alternate
+UltraLowSRAM_Mel30,mel30_cmn,89.72,88.36,13258,12.95,12.66,1142656,0.582,28.57,Min Compute Model
+UltraLowSRAM_C16_Mel40,mel40_cmn,89.63,88.81,12788,12.49,15.00,1350208,0.612,33.76,Evaluated
+UltraLowSRAM_C16_Wide_Mel40,mel40_cmn,89.85,89.16,13772,13.45,15.00,1449216,0.648,36.23,Evaluated
+UltraLowSRAM_Mel20,mel20_cmn,90.33,89.20,14084,13.75,15.00,1437568,0.655,35.94,Evaluated
+UltraLowSRAM_MFCC10 (25ep),mfcc10,91.32,90.43,14764,14.42,13.50,1434112,0.620,35.85,Screening Winner
+UltraLowSRAM_MFCC10_50ep (FINAL WINNER),mfcc10,92.53,91.96,14764,14.42,13.50,1434112,0.618,35.85,ULTRA-LOW-SRAM CHAMPION
