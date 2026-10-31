@@ -19,10 +19,10 @@
 #include "../../deployment/esp32/model/model_config.h"
 #include "../../deployment/esp32/model/model_data.h"
 
-// Pin definitions for INMP441
-#define PIN_I2S_SCK     14
-#define PIN_I2S_WS      15
-#define PIN_I2S_SD      32
+// Pin definitions for INMP441 on Classic ESP32 DevKit
+#define PIN_I2S_SCK     26
+#define PIN_I2S_WS      25
+#define PIN_I2S_SD      33
 #define I2S_PORT        I2S_NUM_0
 
 #define CONFIDENCE_THRESHOLD 0.75f

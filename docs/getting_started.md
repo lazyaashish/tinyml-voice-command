@@ -17,18 +17,27 @@ You only need two inexpensive parts:
 
 ---
 
-## 2. Wire the Microphone to the ESP32
+## 2. Wire the Microphone & OLED to the ESP32
 
-Connect the 5 pins of your INMP441 microphone to the ESP32 pins using your jumper wires:
+Connect the INMP441 microphone and SSD1306 OLED display to your ESP32:
 
+### INMP441 Microphone Pinout
 | INMP441 Mic Pin | ESP32 Board Pin | What It Does |
 |:---|:---|:---|
 | **VDD / VCC** | **3V3** (3.3 Volts) | Powers the microphone. (*Never connect to 5V!*) |
 | **GND** | **GND** (Ground) | Electrical common ground. |
-| **SD** | **GPIO 32** | Sends recorded digital audio bytes to ESP32. |
-| **WS / LRC** | **GPIO 15** | Left/Right word clock signal. |
-| **SCK / BCLK** | **GPIO 14** | High-speed bit clock signal. |
+| **SCK / BCLK** | **GPIO 26** | High-speed bit clock signal. |
+| **WS / LRC** | **GPIO 25** | Left/Right word clock signal. |
+| **SD / DATA** | **GPIO 33** | Sends recorded digital audio bytes to ESP32. |
 | **L/R** | **GND** | Forces audio to Left channel. (*Tie directly to GND!*) |
+
+### 0.96" SSD1306 I2C OLED Pinout
+| OLED Pin | ESP32 Board Pin | What It Does |
+|:---|:---|:---|
+| **VCC** | **3V3** | Powers the display (3.3V). |
+| **GND** | **GND** | Electrical common ground. |
+| **SDA** | **GPIO 21** | I2C Data line. |
+| **SCL** | **GPIO 22** | I2C Clock line. |
 
 > [!TIP]
 > Tying **L/R to GND** is very important. If left unconnected (floating), your audio may have screeching static or random silence.

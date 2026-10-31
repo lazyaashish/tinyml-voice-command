@@ -39,38 +39,46 @@ Depending on whether your project requires an ultracompact voice-navigation syst
 
 Pre-quantized model weights and ready-to-flash firmware are already bundled. You do not need to train anything to get started.
 
-### Step 1: Wire Microphone to ESP32
+### Step 1: Wire Microphone & OLED to ESP32
 
-Connect an **INMP441** digital I2S MEMS microphone to your ESP32:
+Connect your **INMP441** digital I2S MEMS microphone and **SSD1306** I2C OLED display to your classic ESP32 DevKit:
 
 ```text
-  INMP441 MEMS Mic                 ESP32 Development Board
+  INMP441 MEMS Mic                 Classic ESP32 DevKit
   ┌───────────────┐               ┌───────────────────────┐
   │           VDD ├───────────────┤ 3V3 (3.3V Power)      │
   │           GND ├───────────────┤ GND                   │
-  │            SD ├───────────────┤ GPIO 32 (I2S Data)    │
-  │            WS ├───────────────┤ GPIO 15 (Word Select) │
-  │           SCK ├───────────────┤ GPIO 14 (Bit Clock)   │
+  │     SCK(BCLK) ├───────────────┤ GPIO 26 (Bit Clock)   │
+  │     WS(LRCLK) ├───────────────┤ GPIO 25 (Word Select) │
+  │      SD(DATA) ├───────────────┤ GPIO 33 (I2S Data)    │
   │           L/R ├───────────────┤ GND (Left Channel)    │
+  └───────────────┘               │                       │
+  SSD1306 OLED                    │                       │
+  ┌───────────────┐               │                       │
+  │           VCC ├───────────────┤ 3V3 (3.3V Power)      │
+  │           GND ├───────────────┤ GND                   │
+  │           SDA ├───────────────┤ GPIO 21 (I2C Data)    │
+  │           SCL ├───────────────┤ GPIO 22 (I2C Clock)   │
   └───────────────┘               └───────────────────────┘
 ```
 > [!IMPORTANT]
-> Always connect **L/R to GND**. Leaving it floating causes channel distortion and audio noise.
+> - Always connect INMP441 **L/R to GND**. Leaving it floating causes channel distortion and audio noise.
+> - **Note on Model Files:** PyTorch `.pt` checkpoint files cannot run directly on the ESP32. The script `scripts/export_esp32.py` converts the checkpoint into bit-exact C/C++ array headers (`model_data.h` and `model_config.h`) which are compiled into the firmware.
 
-### Step 2: Flash Firmware
+### Step 2: Flash Firmware & Run Hardware Tests
 
-#### Option A: Using Arduino IDE
-1. Open [deployment/esp32/firmware/esp32_kws.ino](deployment/esp32/firmware/esp32_kws.ino) in Arduino IDE.
-2. Select your board: `Tools -> Board -> ESP32 Dev Module`.
-3. Select your serial port and click **Upload**.
+1. Export your desired model (e.g. W76 12-class champion):
+   ```bash
+   python scripts/export_esp32.py --model ext_mel40_w76 --format int8
+   ```
+2. Open [`deployment/esp32/firmware/esp32_kws.ino`](deployment/esp32/firmware/esp32_kws.ino) in Arduino IDE or PlatformIO.
+3. Select board: `Tools -> Board -> ESP32 Dev Module`, select your COM port, and click **Upload**.
 4. Open the Serial Monitor at **115200 baud**.
-
-#### Option B: Using PlatformIO CLI
-```bash
-cd deployment/esp32/platformio
-pio run -t upload
-pio device monitor -b 115200
-```
+5. Interactive Hardware Diagnostic Commands:
+   - Type `1` or `oled`  -> Runs OLED Display Test.
+   - Type `2` or `mic`   -> Runs INMP441 5-Second Real-Time Audio VU Meter.
+   - Type `3` or `bench` -> Runs W76 Physical Hardware Benchmark (Latency, Free Heap, Flash).
+   - Type `4` or `kws`   -> Resumes Continuous Listening Mode.
 
 ### Step 3: Speak and Control!
 Speak into the microphone:

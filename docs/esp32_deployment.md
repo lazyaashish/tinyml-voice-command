@@ -15,26 +15,30 @@ This guide covers advanced hardware integration, pinout mapping across different
 
 ---
 
-## 2. Microphone Hardware & Pinout
+## 2. Hardware Wiring & Pinout Guide
 
-### 2.1 INMP441 Pin Assignment
+### 2.1 INMP441 Digital Microphone Pin Assignment
 
 | INMP441 Pin | ESP32 Pin | GPIO Function | Signal Description |
 |:---|:---|:---|:---|
 | **VDD / 3V3** | **3V3** | Power | 3.3V power supply (Do NOT use 5V) |
 | **GND** | **GND** | Ground | Common system ground |
-| **SD** | **GPIO 32** | `I2S_SD_PIN` | Serial Data out from microphone |
-| **WS** | **GPIO 15** | `I2S_WS_PIN` | Word Select (Left/Right clock) |
-| **SCK** | **GPIO 14** | `I2S_SCK_PIN` | Serial Bit Clock |
-| **L/R** | **GND** | Channel Select | Tie to GND for Left channel |
+| **SCK / BCLK** | **GPIO 26** | `I2S_SCK_PIN` | Serial Bit Clock |
+| **WS / LRCLK** | **GPIO 25** | `I2S_WS_PIN` | Word Select (Left/Right clock) |
+| **SD / DATA** | **GPIO 33** | `I2S_SD_PIN` | Serial Audio Data out from microphone |
+| **L/R** | **GND** | Channel Select | Tie to GND for Left channel (mandatory) |
 
-### 2.2 SPH0645 / ICS-43434 Pin Mapping
+### 2.2 0.96-inch SSD1306 I2C OLED Display
 
-If using an Adafruit SPH0645 or TDK ICS-43434 module:
-- Connect **BCLK** -> `GPIO 14`
-- Connect **LRCL** -> `GPIO 15`
-- Connect **DOUT** -> `GPIO 32`
-- Connect **SEL** -> `GND`
+| OLED Pin | ESP32 Pin | GPIO Function | Signal Description |
+|:---|:---|:---|:---|
+| **VCC** | **3V3** | Power | 3.3V DC power |
+| **GND** | **GND** | Ground | Common system ground |
+| **SDA** | **GPIO 21** | `OLED_SDA_PIN` | I2C Serial Data |
+| **SCL** | **GPIO 22** | `OLED_SCL_PIN` | I2C Serial Clock |
+
+> [!IMPORTANT]
+> Always tie INMP441 **L/R** to **GND**. Leaving L/R floating causes intermittent channel swapping, zero values, or high-pitched digital static. Pin assignments use **GPIO 26, 25, 33** for I2S audio and **GPIO 21, 22** for I2C OLED.
 
 ---
 

@@ -2,11 +2,11 @@
 #define MODEL_CONFIG_H
 
 // ==============================================================================
-// ESP32 Keyword Spotting Metadata & Configuration: TinyML_DSCNN
+// ESP32 Keyword Spotting Metadata & Configuration: Ext_Mel40_StridedStem_W76
 // Generated automatically by scripts/export_esp32.py
 // ==============================================================================
 
-#define KWS_MODEL_NAME          "TinyML_DSCNN"
+#define KWS_MODEL_NAME          "Ext_Mel40_StridedStem_W76"
 #define KWS_MODEL_VERSION       "1.0.0"
 #define KWS_SAMPLE_RATE         16000
 #define KWS_CLIP_DURATION_MS    1000
@@ -26,18 +26,25 @@
 #define KWS_FEATURE_SIZE        (KWS_NUM_TIME_FRAMES * KWS_NUM_MEL_BINS)
 
 // Architecture & Memory
-#define KWS_TOTAL_PARAMETERS    11409
-#define KWS_TOTAL_MACS          2056640
-#define KWS_PEAK_ARENA_BYTES    28800
+#define KWS_TOTAL_PARAMETERS    38360
+#define KWS_TOTAL_MACS          3986688
+#define KWS_PEAK_ARENA_BYTES    20448
 
 // Output Vocabulary
-#define KWS_NUM_CLASSES         5
+#define KWS_NUM_CLASSES         12
 static const char* const KWS_CLASS_LABELS[KWS_NUM_CLASSES] = {
-    "GO",
-    "STOP",
+    "SILENCE",
+    "UNKNOWN",
+    "YES",
+    "NO",
+    "UP",
+    "DOWN",
     "LEFT",
     "RIGHT",
-    "UNKNOWN",
+    "ON",
+    "OFF",
+    "STOP",
+    "GO",
 };
 
 // Default Runtime Thresholds

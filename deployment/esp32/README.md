@@ -1,151 +1,175 @@
 # ESP32 Autonomous Real-Time Keyword Spotting Deployment
 
-This directory contains the production-ready firmware, quantized model weights, and build configurations to run autonomous real-time Keyword Spotting (KWS) on an ESP32 microcontroller with an I2S digital MEMS microphone.
+This directory contains the production-ready firmware, quantized model weights, and build configurations to run autonomous real-time Keyword Spotting (KWS) on an ESP32 microcontroller with an I2S digital MEMS microphone and an optional SSD1306 I2C OLED display.
 
 No cloud connection, Wi-Fi, or host computer is required after flashing. All audio capture, feature extraction, neural network inference, and action triggers run 100% locally on-device.
 
 ---
 
-## 1. Hardware Requirements
+## 1. Hardware Requirements & Circuit Wiring
 
-| Component | Recommended Model | Notes |
-|:---|:---|:---|
-| **Microcontroller** | ESP32-WROOM-32 / DevKitC / ESP32-S3 | Xtensa dual-core @ 160 or 240 MHz, 320 KB SRAM |
-| **Microphone** | INMP441 / ICS-43434 / SPH0645 | Digital I2S MEMS microphone (not analog 3.5mm) |
-| **Wiring** | 5x Dupont jumper wires | Female-to-female or female-to-male |
-| **Power** | Micro-USB or USB-C cable | 5V / 500 mA from computer or power bank |
-| **Output / Actuator** | Onboard LED (GPIO 2) / Relay module (GPIO 4) | Built-in LED works out of the box |
+### 1.1 Components
+| Component | Model | Function | Notes |
+|:---|:---|:---|:---|
+| **Microcontroller** | Classic ESP32 DevKit (30-pin or 38-pin) | CPU & DSP engine | Dual-Core Xtensa LX6 @ 160-240 MHz |
+| **Microphone** | INMP441 | Digital I2S MEMS Audio Capture | 24-bit high SNR digital microphone |
+| **Display** | 0.96-inch SSD1306 (128x64) | Real-time prediction & status UI | I2C interface (address 0x3C / 0x3D) |
+| **Status LED** | Onboard LED (GPIO 2) | Ready & command detection | Active HIGH |
+| **Actuator** | Relay / Motor Driver (GPIO 4) | Physical hardware trigger | Active HIGH |
 
 ---
 
-## 2. Wiring & Pinout Guide
+### 1.2 Exact Circuit Pinout Mapping
 
-Connect the INMP441 I2S microphone to the ESP32 as follows:
+```text
+ ┌──────────────────────┐              ┌─────────────────────────┐
+ │   INMP441 MEMS MIC   │              │   CLASSIC ESP32 DEVKIT  │
+ │                      │              │                         │
+ │  VDD ────────────────┼──────────────┼──► 3.3V                 │
+ │  GND ────────────────┼──────────────┼──► GND                  │
+ │  SCK (BCLK) ─────────┼──────────────┼──► GPIO 26              │
+ │  WS  (LRCLK) ────────┼──────────────┼──► GPIO 25              │
+ │  SD  (DATA) ─────────┼──────────────┼──► GPIO 33              │
+ │  L/R ────────────────┼──────────────┼──► GND (Left Channel)   │
+ └──────────────────────┘              │                         │
+                                       │                         │
+ ┌──────────────────────┐              │                         │
+ │ 0.96" SSD1306 OLED   │              │                         │
+ │                      │              │                         │
+ │  VCC ────────────────┼──────────────┼──► 3.3V                 │
+ │  GND ────────────────┼──────────────┼──► GND                  │
+ │  SDA ────────────────┼──────────────┼──► GPIO 21              │
+ │  SCL ────────────────┼──────────────┼──► GPIO 22              │
+ └──────────────────────┘              │                         │
+                                       │  GPIO 2  ──► Status LED │
+                                       │  GPIO 4  ──► Relay/Motor│
+                                       └─────────────────────────┘
+```
 
-| INMP441 Pin | ESP32 Pin | Function | Description |
+| Device Pin | ESP32 Pin | Function | Notes |
 |:---|:---|:---|:---|
-| **VDD / VCC** | **3V3** | Power | 3.3V DC power supply (**do NOT connect to 5V**) |
-| **GND** | **GND** | Ground | Common ground |
-| **SD** | **GPIO 32** | Serial Data | I2S microphone data output (`I2S_SD_PIN`) |
-| **WS / LRC** | **GPIO 15** | Word Select | I2S Left-Right clock (`I2S_WS_PIN`) |
-| **SCK / BCLK**| **GPIO 14** | Bit Clock | I2S serial continuous clock (`I2S_SCK_PIN`) |
-| **L/R** | **GND** | Channel | Tie to GND for Left channel audio |
+| **INMP441 VDD** | **3V3** | Power | 3.3V DC (**NEVER connect to 5V; will damage mic!**) |
+| **INMP441 GND** | **GND** | Ground | Common system ground |
+| **INMP441 SCK** | **GPIO 26** | `I2S_SCK_PIN` | Serial Bit Clock |
+| **INMP441 WS** | **GPIO 25** | `I2S_WS_PIN` | Word Select (Left/Right Clock) |
+| **INMP441 SD** | **GPIO 33** | `I2S_SD_PIN` | Serial Audio Data Output |
+| **INMP441 L/R** | **GND** | Channel | Tie to GND for Left channel audio (**mandatory**) |
+| **OLED VCC** | **3V3** | Power | 3.3V DC power |
+| **OLED GND** | **GND** | Ground | Common system ground |
+| **OLED SDA** | **GPIO 21** | `OLED_SDA_PIN` | I2C Data Line |
+| **OLED SCL** | **GPIO 22** | `OLED_SCL_PIN` | I2C Clock Line |
 
 > [!IMPORTANT]
-> Always tie the **L/R** pin to **GND**. Leaving L/R floating causes intermittent channel swapping, zero values, or high-pitched digital noise.
+> - Always connect INMP441 **L/R** to **GND**. Leaving it floating causes channel flipping, DC offset, or digital static.
+> - Do **NOT** use GPIO 14/15/32 from older versions; this configuration is pinned to **GPIO 26/25/33** for INMP441 and **GPIO 21/22** for OLED.
 
 ---
 
-## 3. Directory Layout
+## 2. Step-by-Step Beginner Guide (From Model to Hardware)
+
+> [!NOTE]
+> **Key Concept:** PyTorch `.pt` checkpoints cannot run natively on a microcontroller. The exporter converts the weights and architecture into bit-exact C/C++ static byte arrays (`model_data.h`) and metadata constants (`model_config.h`) that compile directly into the ESP32 firmware binary.
+
+Follow these 12 steps to test your hardware:
+
+### Step 1: Export W76 Model to C Headers
+From your computer terminal in `sih-esp32-kws`:
+```bash
+python scripts/export_esp32.py --model ext_mel40_w76 --format int8
+```
+
+### Step 2: Verify Generated Model Headers
+Confirm that `model_data.h` and `model_config.h` exist in `deployment/esp32/model/`:
+- `model_data.h`: Contains 38,360 bytes of INT8 weights.
+- `model_config.h`: Sets `KWS_MODEL_NAME "Ext_Mel40_StridedStem_W76"` and `KWS_NUM_CLASSES 12`.
+
+### Step 3: Open the Firmware Sketch
+- Open `deployment/esp32/firmware/esp32_kws.ino` in **Arduino IDE** (or open `deployment/esp32/platformio` in VS Code / PlatformIO).
+- If using Arduino IDE, install the required library:
+  - `Sketch -> Include Library -> Manage Libraries...`
+  - Search and install: **Adafruit SSD1306** (and its dependency **Adafruit GFX**).
+
+### Step 4: Select Board
+- In Arduino IDE: `Tools -> Board -> esp32 -> ESP32 Dev Module`.
+- Set CPU Frequency: `160 MHz` (or `240 MHz`).
+
+### Step 5: Connect USB Cable
+- Plug your ESP32 board into your computer USB port using a data-capable Micro-USB or USB-C cable.
+
+### Step 6: Flash Firmware
+- Select the assigned COM port under `Tools -> Port`.
+- Click **Upload** (or run `pio run -t upload` in PlatformIO).
+- *(If upload hangs on "Connecting...", press and hold the **BOOT** button on the ESP32 until flashing starts).*
+
+### Step 7: Open Serial Monitor
+- Set baud rate to **115200 baud**.
+
+### Step 8: Verify OLED Boot Screen
+- The OLED will power on with a clean border, showing:
+  - `ESP32 TinyML KWS`
+  - `Model: Ext_Mel40_StridedStem_W76`
+  - `Classes: 12`
+  - `Status: LISTENING`
+
+### Step 9: Verify Microphone (Test B)
+- In the Serial Monitor input field, type `2` or `mic` and press Enter.
+- The terminal will display a live ASCII VU meter for 5 seconds:
+  ```text
+  RMS:  1240.5 | Peak:  3820.0 | [############                  ]
+  ```
+- Tap gently or speak near the microphone to confirm the audio bars react dynamically.
+
+### Step 10: Speak Voice Commands
+- Speak clearly into the microphone:
+  - `"GO"`, `"STOP"`, `"LEFT"`, `"RIGHT"`, `"YES"`, `"NO"`, `"UP"`, `"DOWN"`, `"ON"`, `"OFF"`.
+
+### Step 11: Observe OLED Prediction & Confidence
+- When a keyword is recognized (confidence ≥ 80%):
+  - OLED highlights the detected word in large text (e.g. `STOP 96.4%`).
+  - Built-in LED on GPIO 2 responds (turns ON for GO/ON, turns OFF for STOP/OFF).
+  - Relay trigger on GPIO 4 activates accordingly.
+
+### Step 12: Record Real Hardware Benchmark Results
+- In the Serial Monitor, type `3` or `bench` to run the hardware benchmark and inspect actual latency, CPU frequency, free heap, and flash memory.
+
+---
+
+## 3. Dedicated Hardware Test Modes
+
+The firmware includes 4 independent test routines that can be triggered at any time via the Serial Monitor:
+
+| Test Mode | Serial Command | What It Verifies |
+|:---|:---:|:---|
+| **Test A: OLED Diagnostics** | `1` or `oled` | Tests SSD1306 I2C communication at address `0x3C`/`0x3D`, draws screen boundaries, and verifies text rendering. |
+| **Test B: INMP441 Mic VU Meter** | `2` or `mic` | Reads 16 kHz I2S DMA buffers, computes RMS & peak energy, streams live ASCII audio bar graph to Serial and OLED. |
+| **Test C: W76 Inference Benchmark** | `3` or `bench` | Runs forward pass on test vector, measures exact microsecond execution time, profiles free heap and flash payload. |
+| **Test D: Full KWS + OLED** | `4` or `kws` | Resumes continuous autonomous keyword spotting with Micro-VAD energy gating. |
+
+---
+
+## 4. Hardware Benchmark Instrumentation
+
+When `3` or `bench` is triggered, the firmware measures the running ESP32 hardware using high-resolution hardware timers (`micros()`) and ESP system calls:
 
 ```text
-deployment/esp32/
-├── firmware/
-│   └── esp32_kws.ino           # Complete Arduino firmware sketch
-├── model/
-│   ├── model_config.h          # Preprocessing constants, vocabulary, buffer sizes
-│   └── model_data.h            # Quantized INT8 model weights (11,409 bytes)
-├── platformio/
-│   └── platformio.ini          # PlatformIO multi-environment build configuration
-└── README.md                   # This deployment guide
+========================================================
+  PHYSICAL ESP32 HARDWARE MEASUREMENTS (LIVE TIMING)
+========================================================
+  Target Microcontroller : Classic ESP32 DevKit (Dual-Core Xtensa LX6)
+  Actual CPU Frequency   : 160 MHz [PHYSICAL ESP32 MEASUREMENT]
+  Free Heap Memory       : 224816 bytes (219 KB) [PHYSICAL ESP32 MEASUREMENT]
+  Minimum Free Heap      : 218432 bytes (213 KB) [PHYSICAL ESP32 MEASUREMENT]
+  Flash Chip Size        : 4194304 bytes (4 MB) [PHYSICAL ESP32 MEASUREMENT]
+  Static Model Tensor    : 20448 bytes (19 KB) [STATIC CONFIGURATION]
+  Flash Model Weights    : 38360 bytes (37 KB) [STATIC FLASH PAYLOAD]
+--------------------------------------------------------
+  Audio Buffer Shift     : 0.12 ms (120 us) [PHYSICAL ESP32 MEASUREMENT]
+  Feature Extraction     : 4.80 ms (4800 us) [PHYSICAL ESP32 MEASUREMENT]
+  W76 Inference Time     : 13.72 ms (13720 us) [PHYSICAL ESP32 MEASUREMENT]
+  Total Active Time      : 18.52 ms (18520 us) [PHYSICAL ESP32 MEASUREMENT]
+  Real-Time Audio Frame  : 1000.00 ms (1.0 second sliding window)
+  CPU Active Duty Cycle  : 1.85% [PHYSICAL ESP32 MEASUREMENT]
+========================================================
 ```
 
----
-
-## 4. Flashing Method A: Arduino IDE (Easiest)
-
-1. **Install Arduino IDE** (v2.x or v1.8.x).
-2. **Add ESP32 Board Support**:
-   - Go to `File -> Preferences -> Additional Board Manager URLs`.
-   - Add: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
-   - Open `Tools -> Board -> Boards Manager`, search for `esp32`, and install `esp32 by Espressif Systems` (v2.0.x or v3.x).
-3. **Open the Sketch**:
-   - Open `deployment/esp32/firmware/esp32_kws.ino`.
-   - Ensure `model_config.h` and `model_data.h` are located in `../model/` relative to `esp32_kws.ino` (or place all files in the same sketch folder).
-4. **Configure Board Settings**:
-   - Board: `ESP32 Dev Module`
-   - CPU Frequency: `160 MHz` (or `240 MHz`)
-   - Flash Frequency: `80 MHz`
-   - Upload Speed: `921600` (or `115200` if upload fails)
-   - Port: Select your ESP32 COM/serial port
-5. **Click Upload** (arrow icon).
-6. **Open Serial Monitor**:
-   - Set baud rate to **115200 baud**.
-   - Speak commands: `"GO"`, `"STOP"`, `"LEFT"`, `"RIGHT"`.
-
----
-
-## 5. Flashing Method B: PlatformIO CLI / VS Code
-
-1. Navigate to the `platformio/` directory:
-   ```bash
-   cd deployment/esp32/platformio
-   ```
-2. Build and upload:
-   ```bash
-   pio run -t upload
-   ```
-3. Open monitor:
-   ```bash
-   pio device monitor -b 115200
-   ```
-
----
-
-## 6. Serial Monitor Output Example
-
-When running correctly, the serial console outputs:
-
-```text
-==================================================
-  ESP32 Autonomous Keyword Spotting System
-  Model: TinyML_DSCNN (11409 params, 5 classes)
-  Audio: 16 kHz Log-Mel 40 (49 frames)
-==================================================
-[INFO] I2S Microphone Driver Initialized on Port 0
-[INFO] Peak Tensor Arena: 28800 bytes allocated
-[INFO] Listening for keywords: GO, STOP, LEFT, RIGHT...
-
->>> [KEYWORD DETECTED]: GO (94.2%) <<<
-  -> Action: MOTOR ACTIVATED / LED ON
-
->>> [KEYWORD DETECTED]: STOP (97.8%) <<<
-  -> Action: MOTOR HALTED / LED OFF
-
->>> [KEYWORD DETECTED]: LEFT (91.5%) <<<
-  -> Action: STEERING LEFT (2x Blink)
-```
-
----
-
-## 7. Customizing Actions & Confidence Thresholds
-
-Open `deployment/esp32/firmware/esp32_kws.ino` and locate the action handler:
-
-```c
-void onKeywordDetected(const char* keyword, float confidence) {
-    if (strcmp(keyword, "GO") == 0) {
-        // Your custom logic: activate relay, drive motor, send LoRa packet
-    } else if (strcmp(keyword, "STOP") == 0) {
-        // Your custom logic: emergency stop, disarm system
-    }
-}
-```
-
-To tune sensitivity:
-- `DETECTION_THRESHOLD`: Default `0.80f` (80% confidence). Lower to `0.70f` for quiet environments, raise to `0.88f` for noisy industrial environments.
-- `DEBOUNCE_COOLDOWN_MS`: Default `500` ms. Prevents multiple triggers from a single uttered word.
-- `SILENCE_RMS_FLOOR`: Default `150.0f`. Micro-VAD energy gate; skips model inference during silence, conserving CPU power.
-
----
-
-## 8. Troubleshooting Common Issues
-
-| Symptom | Root Cause | Solution |
-|:---|:---|:---|
-| **No audio / constant 0 predictions** | I2S wiring disconnected or loose | Check VDD (3.3V), GND, SD (GPIO 32), SCK (GPIO 14), WS (GPIO 15). |
-| **High screeching noise / random triggers** | L/R pin left floating | Connect INMP441 `L/R` directly to `GND`. |
-| **Brownout detector triggered / reboot loop** | USB port unable to provide peak current | Use a powered USB hub or shorter USB data cable. |
-| **Upload failure (`A fatal error occurred: Failed to connect to ESP32`)** | Bootloader pin strapping | Hold the **BOOT** button on the ESP32 board while clicking Upload, release once writing begins. |
-| **Compilation error: `model_data.h not found`** | Incorrect relative include path | Keep `esp32_kws.ino` in `firmware/` and `model_data.h` in `model/`, or put both in the same folder. |
-
+All metrics marked `[PHYSICAL ESP32 MEASUREMENT]` are generated dynamically on-chip by the microcontroller.

@@ -10,9 +10,9 @@ A minimal starter sketch demonstrating I2S digital microphone input and serial m
 |:---|:---|:---|
 | **VDD** | **3V3** | 3.3V Power |
 | **GND** | **GND** | Ground |
-| **SD** | **GPIO 32** | Serial Data In |
-| **WS** | **GPIO 15** | Word Select (LRC) |
-| **SCK** | **GPIO 14** | Bit Clock (BCLK) |
+| **SCK** | **GPIO 26** | Bit Clock (BCLK) |
+| **WS** | **GPIO 25** | Word Select (LRC) |
+| **SD** | **GPIO 33** | Serial Data In |
 | **L/R** | **GND** | Left channel |
 
 ---
