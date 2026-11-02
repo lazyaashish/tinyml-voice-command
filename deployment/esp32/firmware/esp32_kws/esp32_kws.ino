@@ -78,7 +78,7 @@
 // ==============================================================================
 // 2. DETECTION & TIMING TUNING
 // ==============================================================================
-#define DETECTION_THRESHOLD 0.50f   // Minimum neural probability (50% for actionable keywords)
+#define DETECTION_THRESHOLD 0.65f   // Minimum neural probability (65% for actionable keywords)
 #define DEBOUNCE_COOLDOWN_MS 1000   // 1.0s cooldown between consecutive keyword triggers
 #define OLED_DISPLAY_HOLD_MS 2000   // Auto-revert OLED to LISTENING after 2 seconds
 
@@ -111,14 +111,16 @@ int16_t inference_audio_window[RING_BUFFER_SAMPLES];
 // Streaming VAD state tracking
 float ambient_noise_floor = 20.0f;
 int voice_consecutive_chunks = 0;
+int silence_consecutive_chunks = 0;
 int speech_samples_accumulated = 0;
+#define HANGOVER_CHUNKS 18   // ~288 ms of trailing audio after voice ends to let word center in window
 
 // Copies the exact continuous, chronological 1.0-second slice from the circular buffer
 void copyLatest1SecondAudio(int16_t* dest) {
-    // ring_buffer_write_idx points to the oldest sample in the 1.0s window
-    for (int i = 0; i < RING_BUFFER_SAMPLES; i++) {
-        int idx = (ring_buffer_write_idx + i) % RING_BUFFER_SAMPLES;
-        dest[i] = audio_ring_buffer[idx];
+    int first_chunk_len = RING_BUFFER_SAMPLES - ring_buffer_write_idx;
+    memcpy(dest, &audio_ring_buffer[ring_buffer_write_idx], first_chunk_len * sizeof(int16_t));
+    if (ring_buffer_write_idx > 0) {
+        memcpy(&dest[first_chunk_len], &audio_ring_buffer[0], ring_buffer_write_idx * sizeof(int16_t));
     }
 }
 
@@ -590,9 +592,12 @@ void loop() {
         // Adaptive speech trigger threshold (sensitive: 1.8x room noise, minimum floor of 42.0)
         float speech_threshold = fmaxf(42.0f, ambient_noise_floor * 1.8f);
 
-        // 3. Streaming Voice Activity & Sliding Hop Trigger
-        if (chunk_rms >= speech_threshold) {
+        // 3. Streaming Voice Activity & Sliding Hop Trigger with Trailing Hangover
+        bool is_speech = (chunk_rms >= speech_threshold);
+
+        if (is_speech) {
             voice_consecutive_chunks++;
+            silence_consecutive_chunks = 0;
             speech_samples_accumulated += samples_read;
 
             // Trigger sliding neural inference every ~150 ms of active speech
@@ -602,18 +607,29 @@ void loop() {
                 // Run instant forward inference on the latest 1.0s window
                 bool triggered = runStreamingInference();
                 if (triggered) {
-                    // Reset voice accumulator after successful detection
                     voice_consecutive_chunks = 0;
+                    silence_consecutive_chunks = HANGOVER_CHUNKS + 1; // Cooldown
                 }
             }
         } 
         else {
-            // Silence / Idle: reset speech accumulator gradually
-            if (voice_consecutive_chunks > 0) {
-                // If speech just ended, run one final verification inference on the completed word
-                if (voice_consecutive_chunks >= 3 && speech_samples_accumulated > 800) {
-                    runStreamingInference();
+            silence_consecutive_chunks++;
+
+            // If speech was recently active, keep sliding through trailing hangover (~288 ms)
+            // This rolls the spoken word directly into the optimal acoustic center of the 1.0s buffer
+            if (voice_consecutive_chunks >= 2 && silence_consecutive_chunks <= HANGOVER_CHUNKS) {
+                speech_samples_accumulated += samples_read;
+                if (speech_samples_accumulated >= INFERENCE_HOP_SAMPLES) {
+                    speech_samples_accumulated = 0;
+                    bool triggered = runStreamingInference();
+                    if (triggered) {
+                        voice_consecutive_chunks = 0;
+                        silence_consecutive_chunks = HANGOVER_CHUNKS + 1;
+                    }
                 }
+            } 
+            else if (silence_consecutive_chunks > HANGOVER_CHUNKS) {
+                // Fully idle in silence: reset counters, bypass all neural inference (0.1% CPU)
                 voice_consecutive_chunks = 0;
                 speech_samples_accumulated = 0;
             }
